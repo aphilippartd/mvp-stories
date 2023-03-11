@@ -234,10 +234,10 @@ There are a few things that we need to modify in this template to make our appli
 
 Now that we have our IaC settled, there is a last thing we need to take care of before being able to deploy. In application composer, we have defined 4 lambda resources. We have defined their configuration but we did not define the actual code contained in those lambda functions. Let's do this now.
 
-1. Remove all files and folders from your `backend` directory that have eventually been created for you by Application Composer EXCEPT for the `template.yaml` file.
+1. Remove the `src/` directory that has eventually been created for you by Application Composer EXCEPT from your `backend` directory.
 2. Run the following 2 commands
     ```sh
-    npm init # Respond to prompts as per your requirements
+    npm init # Only if package.json file for your backend directory does not exist yet. Respond to prompts as per your requirements
     npm install aws-sdk node-fetch uuid
     ```
 3. Create a `src/handlers` directory
