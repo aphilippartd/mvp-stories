@@ -1,29 +1,18 @@
-# riseUpFrontend
+# MVP Stories frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+This template should help you test your MVP stories application.
 
-## Recommended IDE Setup
+> Remember to update your MVP stories backend API endpoint in your `src/App.vue` file to be able to test out the application.
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
+## Run it locally
 
-## Customize configuration
+Run the following commands to run your project locally:
+1. `npm install`
+2. `npm run dev`
 
-See [Vite Configuration Reference](https://vitejs.dev/config/).
+## Build your files for deployment
 
-## Project Setup
+Run the following command to build your html, css and js files to be used for deployment: `npm run build`
 
-```sh
-npm install
-```
+This command should create a `dist` folder containing the application files.
 
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Compile and Minify for Production
-
-```sh
-npm run build
-```
