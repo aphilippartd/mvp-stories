@@ -7,10 +7,11 @@ In order to proceed with the demo, you should have the following:
 - [AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed
 - [Configure your AWS credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
 - Have an API key for the [external LLM (Large Language Model)](https://platform.openai.com/) we will be using during the demo.
+- Download the contents of this directory to use it when going over the demo.
 
 ## What we are building
 
-TODO
+In this demo, we want to assess how we can use AWS Application Composer and other AWS tools in order to create an MVP on AWS. For the purpose of this demo, we want to be able to generate children stories in mp3 format by giving in the context of our story as well as the language in which we want our story to be narated. We want to be able to access our mvp on any browser.
 
 ## Architecture
 
@@ -44,7 +45,7 @@ During this demo, we will be performing API calls to an external LLM API. We wil
 
 Now we will start building the backend of our solution. In order to do so, we will be leveraging [AWS Application Composer](https://aws.amazon.com/application-composer/).
 
-1. Let's start by creating a directory on our local computer called `mvp-stories`. This directory should contain two subdirectories, one for our frontend, one for our backend. Create two additional directories:
+1. Let's start by downloading the contents of this directory on your local computer. Alternatively, start by creating a directory on your local computer called `mvp-stories`. This directory should contain two subdirectories, one for our frontend, one for our backend. Create the two directories:
    - `mvp-stories/backend`
    - `mvp-stories/frontend`
 2. Head to the [Application Composer console](https://console.aws.amazon.com/composer/home)
@@ -54,42 +55,42 @@ Now we will start building the backend of our solution. In order to do so, we wi
 6. Select the **mvp-stories/backend** folder
 7. Click **Create**
 ![plot](./images/backend-part-1/1.png)
-8. Drag and drop an API Gateway resource into the canvas
+1. Drag and drop an API Gateway resource into the canvas
 ![plot](./images/backend-part-1/2.png)
-9. Click on the resource
-10. Click on **Details**
-11. Enter the logical ID to be **MvpStoriesApi**
+1. Click on the resource
+2.  Click on **Details**
+3.  Enter the logical ID to be **MvpStoriesApi**
 ![plot](./images/backend-part-1/3.png)
-12. Scroll down to the routes section and change the **GET** method to **POST**
-13. Click on Add **corsallowedorigins** and set value to **\***
+1.  Scroll down to the routes section and change the **GET** method to **POST**
+2.  Click on Add **corsallowedorigins** and set value to **\***
     > NOTE: All origins allowed for simplicity and the purpose of this demo, can be changed later to only allow the actual frontend making the requests
-14. Repeat for **CORS allowed headers** and **CORS allowed methods**
-15. Click save
+3.  Repeat for **CORS allowed headers** and **CORS allowed methods**
+4.  Click save
 ![plot](./images/backend-part-1/4.png)
-16. Add the lambda resource that will be triggered from API Gateway.
+1.  Add the lambda resource that will be triggered from API Gateway.
     ![plot](./images/backend-part-1/5.png)
-17. Click on **Details**
-18. Enter the logical ID to be **MvpStoriesWorkflowTrigger**
-19. Update **Source path** field to an empty string
-20. Update **Handler** field to `src/handlers/workflowTrigger.handler`
+2.  Click on **Details**
+3.  Enter the logical ID to be **MvpStoriesWorkflowTrigger**
+4.  Update **Source path** field to an empty string
+5.  Update **Handler** field to `src/handlers/workflowTrigger.handler`
     > Note: For simplicity of the demo we will keep all lambda functions in one directory. On a "real" project, you may want to have one directory per function and define configuration per function. In that case, the Source path of your function should be `the/directory/where/your/function/is` and the Handler `theNameOfYourJsFile.theExportedHandlerFunction` eg: `src/myFunction` and `index.handler` respectively.
-21. Click save
+6.  Click save
     ![plot](./images/backend-part-1/6.png)
-22. Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
+7.  Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
     ![plot](./images/backend-part-1/7.png)
-23. Add a Step Function resource to the canvas
+8.  Add a Step Function resource to the canvas
     ![plot](./images/backend-part-1/8.png)
-24. Click on **Details**
-25. Set the logical ID the Step Function resource to **MvpStoriesWorkflow**
-26. Click save
+9.  Click on **Details**
+10. Set the logical ID the Step Function resource to **MvpStoriesWorkflow**
+11. Click save
     ![plot](./images/backend-part-1/9.png)
-27. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
+12. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
     ![plot](./images/backend-part-1/10.png)
-28. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
+13. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
     - Logical ID to **MvpStoriesGenerator**, Source path to empty string and Handler to `src/handlers/generator.handler`
     - Logical ID to **MvpStoriesTranslate**, Source path to empty string and Handler to `src/handlers/translator.handler`
     - Logical ID to **MvpStoriesTextToSpeech**, Source path to empty string and Handler to `src/handlers/textToSpeech.handler`
-29. Your canvas should look something like this:
+14. Your canvas should look something like this:
     ![plot](./images/backend-part-1/11.png)
 
 
