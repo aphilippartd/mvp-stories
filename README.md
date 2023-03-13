@@ -426,3 +426,4 @@ A few ideas on how to improve on the current solution:
 - Have different deployments for different environments
 - Let your application work `async` by submitting the request, integrating API Gateway with Step Functions directly (without the need to go through a lambda invocation) and working with websockets to notify the user when the story has been generated.
 - Directly call AWS services like Amazon Polly and Amazon Translate from your Step Function workflow (this requires more knowledge on how the Step Function service works)
+- ...
