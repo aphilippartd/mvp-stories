@@ -55,42 +55,42 @@ Now we will start building the backend of our solution. In order to do so, we wi
 6. Select the **mvp-stories/backend** folder
 7. Click **Create**
 ![plot](./images/backend-part-1/1.png)
-1. Drag and drop an API Gateway resource into the canvas
+8. Drag and drop an API Gateway resource into the canvas
 ![plot](./images/backend-part-1/2.png)
-1. Click on the resource
-2.  Click on **Details**
-3.  Enter the logical ID to be **MvpStoriesApi**
+9. Click on the resource
+10.  Click on **Details**
+11.  Enter the logical ID to be **MvpStoriesApi**
 ![plot](./images/backend-part-1/3.png)
-1.  Scroll down to the routes section and change the **GET** method to **POST**
-2.  Click on Add **corsallowedorigins** and set value to **\***
+12.  Scroll down to the routes section and change the **GET** method to **POST**
+13.  Click on Add **corsallowedorigins** and set value to **\***
     > NOTE: All origins allowed for simplicity and the purpose of this demo, can be changed later to only allow the actual frontend making the requests
-3.  Repeat for **CORS allowed headers** and **CORS allowed methods**
-4.  Click save
+14.  Repeat for **CORS allowed headers** and **CORS allowed methods**
+15.  Click save
 ![plot](./images/backend-part-1/4.png)
-1.  Add the lambda resource that will be triggered from API Gateway.
+16.  Add the lambda resource that will be triggered from API Gateway.
     ![plot](./images/backend-part-1/5.png)
-2.  Click on **Details**
-3.  Enter the logical ID to be **MvpStoriesWorkflowTrigger**
-4.  Update **Source path** field to an empty string
-5.  Update **Handler** field to `src/handlers/workflowTrigger.handler`
+17.  Click on **Details**
+18.  Enter the logical ID to be **MvpStoriesWorkflowTrigger**
+19.  Update **Source path** field to an empty string
+20.  Update **Handler** field to `src/handlers/workflowTrigger.handler`
     > Note: For simplicity of the demo we will keep all lambda functions in one directory. On a "real" project, you may want to have one directory per function and define configuration per function. In that case, the Source path of your function should be `the/directory/where/your/function/is` and the Handler `theNameOfYourJsFile.theExportedHandlerFunction` eg: `src/myFunction` and `index.handler` respectively.
-6.  Click save
+21.  Click save
     ![plot](./images/backend-part-1/6.png)
-7.  Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
+22.  Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
     ![plot](./images/backend-part-1/7.png)
-8.  Add a Step Function resource to the canvas
+23.  Add a Step Function resource to the canvas
     ![plot](./images/backend-part-1/8.png)
-9.  Click on **Details**
-10. Set the logical ID the Step Function resource to **MvpStoriesWorkflow**
-11. Click save
+24.  Click on **Details**
+25. Set the logical ID the Step Function resource to **MvpStoriesWorkflow**
+26. Click save
     ![plot](./images/backend-part-1/9.png)
-12. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
+27. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
     ![plot](./images/backend-part-1/10.png)
-13. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
+28. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
     - Logical ID to **MvpStoriesGenerator**, Source path to empty string and Handler to `src/handlers/generator.handler`
     - Logical ID to **MvpStoriesTranslate**, Source path to empty string and Handler to `src/handlers/translator.handler`
     - Logical ID to **MvpStoriesTextToSpeech**, Source path to empty string and Handler to `src/handlers/textToSpeech.handler`
-14. Your canvas should look something like this:
+29. Your canvas should look something like this:
     ![plot](./images/backend-part-1/11.png)
 
 
@@ -424,5 +424,5 @@ A few ideas on how to improve on the current solution:
   - The `sam pipeline` command can help you setup a deployment pipeline. More information about this [here](https://aws.amazon.com/blogs/compute/introducing-aws-sam-pipelines-automatically-generate-deployment-pipelines-for-serverless-applications/)
   - Amplify hosting can be directly connected to your git provider, meaning that on every push, it would re-build your frontend and deploy it for you.
 - Have different deployments for different environments
-- Let your application work `async` by submitting the request and working with websockets to notify the user when the story has been generated.
+- Let your application work `async` by submitting the request, integrating API Gateway with Step Functions directly (without the need to go through a lambda invocation) and working with websockets to notify the user when the story has been generated.
 - Directly call AWS services like Amazon Polly and Amazon Translate from your Step Function workflow (this requires more knowledge on how the Step Function service works)
