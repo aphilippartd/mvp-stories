@@ -87,7 +87,7 @@ Now we will start building the backend of our solution. In order to do so, we wi
     ![plot](./images/backend-part-1/10.png)
 28. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
     - Logical ID to **MvpStoriesGenerator**, Source path to `src/handlers` and Handler to `generator.handler`
-    - Logical ID to **MvpStoriesTranslate**, Source path to `src/handlers` and Handler to `translator.handler`
+    - Logical ID to **MvpStoriesTranslator**, Source path to `src/handlers` and Handler to `translator.handler`
     - Logical ID to **MvpStoriesTextToSpeech**, Source path to `src/handlers` and Handler to `textToSpeech.handler`
 29. Your canvas should look something like this:
     ![plot](./images/backend-part-1/11.png)
@@ -173,7 +173,7 @@ All the AWS resources (AWS Secrets Manager, Amazon Polly and Amazon Translate) w
     ```
 12. Click save
     ![plot](./images/backend-part-2/6.png)
-13. Click on **MvpStoriesTranslate** resource details and scroll down to the **Permissions** section.
+13. Click on **MvpStoriesTranslator** resource details and scroll down to the **Permissions** section.
 14. Paste the following code snippet:
     ```yaml
     - Statement:
@@ -238,7 +238,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
 3. Run the following 2 commands
     ```sh
     npm init
-    npm install aws-sdk node-fetch uuid
+    npm install node-fetch uuid
     ```
 4. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
     ```js
@@ -252,7 +252,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
       }
       const sfnClient = new SFNClient()
       const sfnCommand = new StartSyncExecutionCommand(sfnInput)
-      const sfnResponse = await client.send(sfnCommand)
+      const sfnResponse = await sfnClient.send(sfnCommand)
       return {
         statusCode: 200,
         headers: {
@@ -260,7 +260,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
           "Access-Control-Allow-Origin": "*", 
           "Access-Control-Allow-Methods": "*"
         },
-        body: JSON.stringify(JSON.parse(data.output))
+        body: JSON.stringify(JSON.parse(sfnResponse.output))
       }
     }
     ```
@@ -309,7 +309,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate"
 
     export const handler = async (event) => {
-      let data = {}
+      let translateResponse = {}
       if (['fr', 'nl', 'ar', 'it'].includes(event.locale)) {
         const translateInput = {
           SourceLanguageCode: 'en',
@@ -318,7 +318,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
         }
         const translateClient = new TranslateClient()
         const translateCommand = new TranslateTextCommand(translateInput)
-        const translateResponse = await client.send(translateCommand)
+        translateResponse = await translateClient.send(translateCommand)
       }
       return { ...event, translatedStory: translateResponse.TranslatedText }
     }
@@ -327,7 +327,8 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
 7. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
     ```js
     import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly"
-    import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+    import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
+    import { Upload } from "@aws-sdk/lib-storage"
     import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
     import { v4 as uuidv4 } from 'uuid'
 
@@ -352,12 +353,15 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
         ContentType: 'audio/mpeg'
       }
       const s3Client = new S3Client()
-      const s3UploadCommand = new PutObjectCommand(s3UploadInput)
-      await s3Client.send(s3UploadCommand)
+      const s3Upload = new Upload({
+        client: s3Client,
+        params: s3UploadInput,
+      })
+      await s3Upload.done()
 
       const s3GetObjectInput = { Bucket: process.env.BUCKET_NAME, Key: mp3FileName }
       const s3GetObjectCommand = new GetObjectCommand(s3GetObjectInput)
-      const mp3Url = await getSignedUrl(s3Client, command, { expiresIn: signedUrlExpiresIn })
+      const mp3Url = await getSignedUrl(s3Client, s3GetObjectCommand, { expiresIn: signedUrlExpiresIn })
       
       return { ...event, mp3Url }
     }
