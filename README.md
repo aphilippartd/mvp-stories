@@ -71,9 +71,8 @@ Now we will start building the backend of our solution. In order to do so, we wi
     ![plot](./images/backend-part-1/5.png)
 17.  Click on **Details**
 18.  Enter the logical ID to be **MvpStoriesWorkflowTrigger**
-19.  Update **Source path** field to an empty string
-20.  Update **Handler** field to `src/handlers/workflowTrigger.handler`
-    > Note: For simplicity of the demo we will keep all lambda functions in one directory. On a "real" project, you may want to have one directory per function and define configuration per function. In that case, the Source path of your function should be `the/directory/where/your/function/is` and the Handler `theNameOfYourJsFile.theExportedHandlerFunction` eg: `src/myFunction` and `index.handler` respectively.
+19.  Update **Source path** field to `src/handlers`. This is the location where your lambda code will be stored locally.
+20.  Update **Handler** field to `workflowTrigger.handler`. This is the name of the js file containing the lambda code and the relative handler method that is exposed
 21.  Click save
     ![plot](./images/backend-part-1/6.png)
 22.  Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
@@ -87,9 +86,9 @@ Now we will start building the backend of our solution. In order to do so, we wi
 27. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
     ![plot](./images/backend-part-1/10.png)
 28. Drag and drop 3 lambda functions resources, similarly to the firstly created lambda function resource. Change the following details respectively for every function:
-    - Logical ID to **MvpStoriesGenerator**, Source path to empty string and Handler to `src/handlers/generator.handler`
-    - Logical ID to **MvpStoriesTranslate**, Source path to empty string and Handler to `src/handlers/translator.handler`
-    - Logical ID to **MvpStoriesTextToSpeech**, Source path to empty string and Handler to `src/handlers/textToSpeech.handler`
+    - Logical ID to **MvpStoriesGenerator**, Source path to `src/handlers` and Handler to `generator.handler`
+    - Logical ID to **MvpStoriesTranslator**, Source path to `src/handlers` and Handler to `translator.handler`
+    - Logical ID to **MvpStoriesTextToSpeech**, Source path to `src/handlers` and Handler to `textToSpeech.handler`
 29. Your canvas should look something like this:
     ![plot](./images/backend-part-1/11.png)
 
@@ -174,7 +173,7 @@ All the AWS resources (AWS Secrets Manager, Amazon Polly and Amazon Translate) w
     ```
 12. Click save
     ![plot](./images/backend-part-2/6.png)
-13. Click on **MvpStoriesTranslate** resource details and scroll down to the **Permissions** section.
+13. Click on **MvpStoriesTranslator** resource details and scroll down to the **Permissions** section.
 14. Paste the following code snippet:
     ```yaml
     - Statement:
@@ -234,25 +233,26 @@ There are a few things that we need to modify in this template to make our appli
 
 Now that we have our IaC settled, there is a last thing we need to take care of before being able to deploy. In application composer, we have defined 4 lambda resources. We have defined their configuration but we did not define the actual code contained in those lambda functions. Let's do this now.
 
-1. Remove the `src/` directory that has eventually been created for you by Application Composer EXCEPT from your `backend` directory.
-2. Run the following 2 commands
+1. Remove the `src/` directory that has eventually been created for you by Application Composer  from your `backend` directory.
+2. Create a `src/handlers` directory and **cd** into that directory
+3. Run the following 2 commands
     ```sh
-    npm init # Only if package.json file for your backend directory does not exist yet. Respond to prompts as per your requirements
-    npm install aws-sdk node-fetch uuid
+    npm init
+    npm install node-fetch uuid
     ```
-3. Create a `src/handlers` directory
 4. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
     ```js
-    import AWS from 'aws-sdk'
+    import { SFNClient, StartSyncExecutionCommand } from "@aws-sdk/client-sfn"
 
     export const handler = async (event) => {
       const body = JSON.parse(event.body)
-      const stepFunctionParams = {
+      const sfnInput = {
         stateMachineArn: process.env.STATE_MACHINE_ARN,
         input: JSON.stringify({ context: body.context, locale: body.locale || 'en' })
       }
-      const stepFunctions = new AWS.StepFunctions()
-      const data = await stepFunctions.startSyncExecution(stepFunctionParams).promise()
+      const sfnClient = new SFNClient()
+      const sfnCommand = new StartSyncExecutionCommand(sfnInput)
+      const sfnResponse = await sfnClient.send(sfnCommand)
       return {
         statusCode: 200,
         headers: {
@@ -260,7 +260,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
           "Access-Control-Allow-Origin": "*", 
           "Access-Control-Allow-Methods": "*"
         },
-        body: JSON.stringify(JSON.parse(data.output))
+        body: JSON.stringify(JSON.parse(sfnResponse.output))
       }
     }
     ```
@@ -306,56 +306,62 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     This code will request the API for the external LLM to Secrets Manager. It will then make a request to the external LLM to generate a 80-120 words long children story by including the input context and will add the story and return it along with the input event.
 6. Create a `src/handlers/translator.mjs` file and type in the following code
     ```js
-    import SDK from 'aws-sdk'
-    const { Translate } = SDK
-    const translate = new Translate()
+    import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate"
 
     export const handler = async (event) => {
-      let data = {}
+      let translateResponse = {}
       if (['fr', 'nl', 'ar', 'it'].includes(event.locale)) {
-        const translateParams = {
+        const translateInput = {
           SourceLanguageCode: 'en',
           TargetLanguageCode: event.locale,
           Text: event.story
         }
-        data = await translate.translateText(translateParams).promise()
+        const translateClient = new TranslateClient()
+        const translateCommand = new TranslateTextCommand(translateInput)
+        translateResponse = await translateClient.send(translateCommand)
       }
-      return { ...event, translatedStory: data.TranslatedText }
+      return { ...event, translatedStory: translateResponse.TranslatedText }
     }
     ```
     This code will take an check if the the story needs to be translated and translate it accordingly. It will then return the translated story along with the input event.
 7. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
     ```js
-    import SDK from 'aws-sdk'
-    const { Polly, S3 } = SDK
+    import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly"
+    import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
+    import { Upload } from "@aws-sdk/lib-storage"
+    import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
     import { v4 as uuidv4 } from 'uuid'
 
-    const polly = new Polly({ region: process.env.AWS_REGION })
-    const s3 = new S3({ signatureVersion: 'v4', region: process.env.AWS_REGION })
-
-    export const handler = async (event) => {    
-      const pollyData = await polly.synthesizeSpeech({
+    export const handler = async (event) => {   
+      const pollyInput = {
         Engine: "neural",
         OutputFormat: 'mp3',
         Text: event.translatedStory || event.story,
         VoiceId: getVoiceId(event.locale),
-      }).promise()
+      }
+      const pollyClient = new PollyClient()
+      const pollyCommand = new SynthesizeSpeechCommand(pollyInput)
+      const pollyResponse = await pollyClient.send(pollyCommand)
       
       const mp3FileName = `${uuidv4()}.mp3`
-      const signedUrlExpireSeconds = 60 * 5
+      const signedUrlExpiresIn = 60 * 5
 
-      await s3.upload({
-        Body: pollyData.AudioStream,
+      const s3UploadInput = {
+        Body: pollyResponse.AudioStream,
         Bucket: process.env.BUCKET_NAME,
         Key: mp3FileName,
         ContentType: 'audio/mpeg'
-      }).promise()
-
-      const mp3Url = s3.getSignedUrl('getObject', {
-        Bucket: process.env.BUCKET_NAME,
-        Key: mp3FileName,
-        Expires: signedUrlExpireSeconds
+      }
+      const s3Client = new S3Client()
+      const s3Upload = new Upload({
+        client: s3Client,
+        params: s3UploadInput,
       })
+      await s3Upload.done()
+
+      const s3GetObjectInput = { Bucket: process.env.BUCKET_NAME, Key: mp3FileName }
+      const s3GetObjectCommand = new GetObjectCommand(s3GetObjectInput)
+      const mp3Url = await getSignedUrl(s3Client, s3GetObjectCommand, { expiresIn: signedUrlExpiresIn })
       
       return { ...event, mp3Url }
     }
@@ -373,7 +379,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
 ### Deploying the backend
 
 Now that we have everything in place we can deploy our backend. In order to do so we will need to run 2 commands:
-1. Run `sam build`
+1. From the root of your `backend` directory, run `sam build`
 2. Run `sam deploy --guided`
    This command will ask for some information regarding your deployment, you can fill the values in as follows:
    ![plot](./images/backend-deploy/1.png)
