@@ -6,7 +6,6 @@ In order to proceed with the demo, you should have the following:
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed
 - [AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed
 - [Configure your AWS credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
-- Have an API key for the [external LLM (Large Language Model)](https://platform.openai.com/) we will be using during the demo.
 - Download the contents of this directory to use it when going over the demo.
 
 ## What we are building
@@ -41,7 +40,8 @@ During this demo, we will be performing API calls to a LLM. In order to deploy o
   ![plot](./images/sagemaker/6.png)
 10. Click on **Deploy**
   ![plot](./images/sagemaker/7.png)
-11. Take note of the endpoint ARN and name
+  > Note: You might receive an error informing you that you have available instance to deploy your endpoint to. You might need to request a quota increase for this type of instance [here](https://console.aws.amazon.com/servicequotas/home/services/sagemaker/quotas).
+1.  Take note of the endpoint ARN and name
   ![plot](./images/sagemaker/8.png)
 
 The deployment of your Sagemaker endpoint should take about 5-10 minutes. We will continue with the rest of the app in the meantime. 
