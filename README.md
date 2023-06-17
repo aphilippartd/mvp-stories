@@ -20,26 +20,31 @@ This is the architecture of the solution we are going to build:
 
 ## Demo
 
-### Store your API key in Secrets Manager
+### Deploy your LLM
 
-During this demo, we will be performing API calls to an external LLM API. We will need to use and API key but do not want to store those credentials in plain text in our application code.
+During this demo, we will be performing API calls to a LLM. In order to deploy our LLM, we will be using [Sagemaker Jumpstart](https://docs.aws.amazon.com/sagemaker/latest/dg/studio-jumpstart.html). 
 
-1. Head to the [AWS Secrets Manager console](https://console.aws.amazon.com/secretsmanager/home)
-2. Click on **Store an new secret**
-3. Select **Other type of secret**
-4. Choose **Plaintext**.
-5. Enter your secret API key coming form the external LLM provider. Note that we are not using key/value pairs out of simplicity as we only have 1 secret to store.
-    ![plot](./images/secrets-manager/1.png)
-6. Click next
-7. Enter the secret name: **MvpStories/LLMKey**
-8. Enter desciption: **Key to call external LLM API for MVP Stories demo**
-   ![plot](./images/secrets-manager/2.png)
-9.  Click Next
-10. Click Next
-11. You should see a recap of your secret as well as a sample code you can use to retrieve your secrets in your application (eg: in a lambda function)
-12. Click Store
+1. Head to the [Amazon Sagemaker domains console](https://console.aws.amazon.com/sagemaker/home#/studio)
+2. Click on **Create Domain**
+  ![plot](./images/sagemaker/1.png)
+3. Choose the name of your domain and user profile.
+4. Click on **Submit**.
+  ![plot](./images/sagemaker/2.png)
+5. Click on the Sagemaker domain you just created
+   ![plot](./images/sagemaker/3.png)
+6. Launch Sagemaker Studio
+  ![plot](./images/sagemaker/4.png)
+7. Click on **Sagemaker Jumpstart -> Models, notebooks, solutions**
+  ![plot](./images/sagemaker/5.png)
+8. Look for **falcon**
+9. Select **Falcon 7B Instruct BF16** and click on **View model**
+  ![plot](./images/sagemaker/6.png)
+10. Click on **Deploy**
+  ![plot](./images/sagemaker/7.png)
+11. Take note of the endpoint ARN and name
+  ![plot](./images/sagemaker/8.png)
 
-
+The deployment of your Sagemaker endpoint should take about 5-10 minutes. We will continue with the rest of the app in the meantime. 
 
 ### Build the backend with Application Composer - Part 1
 
@@ -167,14 +172,15 @@ All the AWS resources (AWS Secrets Manager, Amazon Polly and Amazon Translate) w
     - Statement:
       - Effect: Allow
         Action:
-          - secretsmanager:GetSecretValue
+          - sagemaker:InvokeEndpoint
         Resource:
-          - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:MvpStories/LLMKey-??????
+          - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/YOUR_ENDPOINT_NAME
     ```
-12. Click save
+12. Add an environment variable to the function called **SAGEMAKER_ENDPOINT_NAME** and fill in the name of your sagemaker endpoint
+13. Click save
     ![plot](./images/backend-part-2/6.png)
-13. Click on **MvpStoriesTranslator** resource details and scroll down to the **Permissions** section.
-14. Paste the following code snippet:
+14. Click on **MvpStoriesTranslator** resource details and scroll down to the **Permissions** section.
+15. Paste the following code snippet:
     ```yaml
     - Statement:
       - Effect: Allow
@@ -183,10 +189,10 @@ All the AWS resources (AWS Secrets Manager, Amazon Polly and Amazon Translate) w
         Resource:
           - '*'
     ```
-15. Click save
+16. Click save
     ![plot](./images/backend-part-2/7.png)
-16. Click on **MvpStoriesTextToSpeech** resource details and scroll down to the **Permissions** section.
-17. Add the following code snippet to the existing permission (S3):
+17. Click on **MvpStoriesTextToSpeech** resource details and scroll down to the **Permissions** section.
+18. Add the following code snippet to the existing permission (S3):
     ```yaml
     - Statement:
       - Effect: Allow
@@ -195,7 +201,7 @@ All the AWS resources (AWS Secrets Manager, Amazon Polly and Amazon Translate) w
         Resource: 
           - "*"
     ```
-18. Click save
+19. Click save
     ![plot](./images/backend-part-2/8.png)
 
 ### Finalize the backend locally
@@ -267,43 +273,34 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     This code will handle the request incoming from API Gateway, call the Step Function workflow syncronously and return the formatted results.
 5. Create a `src/handlers/generator.mjs` file and type in the following code
     ```js
-    import {
-      SecretsManagerClient,
-      GetSecretValueCommand,
-    } from "@aws-sdk/client-secrets-manager"
+    import { SageMakerRuntimeClient, InvokeEndpointCommand } from "@aws-sdk/client-sagemaker-runtime"
+    const sageMakerClient = new SageMakerRuntimeClient()
 
     export const handler = async (event) => {
-      const LLMSecret = await getLLMSecret()
-      const response = await fetch("https://api.openai.com/v1/completions", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${LLMSecret}`
-        },
-        body: JSON.stringify({
-          "model": "text-davinci-003",
-          "prompt": `Can you write an 80-120 words long children story about ${event.context}`,
-          "max_tokens": 1000,
-          "temperature": 0
+
+      const params = {
+        EndpointName: process.env.SAGEMAKER_ENDPOINT_NAME,
+        ContentType: "application/json",
+        Body: JSON.stringify({
+          "inputs": `Can you write an 80-120 words long children story about ${event.context}`,
+          "parameters": {
+            "max_new_tokens": 300,
+            "return_full_text": false,
+            "do_sample": true,
+            "top_k":10
+          }
         })
-      })
-
-      const responseJson = await response.json()
-      return { ...event, story: responseJson.choices[0].text }
-    }
-
-
-    const getLLMSecret = async () => {
-      const SecretId = "MvpStories/LLMKey"
-      const client = new SecretsManagerClient({ region: process.env.AWS_REGION })
-      try {
-        return (await client.send(new GetSecretValueCommand({ SecretId }))).SecretString
-      } catch (error) {
-        throw error
       }
+
+      const command = new InvokeEndpointCommand(params)
+      const response = await sageMakerClient.send(command)
+      const jsonString = Buffer.from(response.Body).toString('utf8')
+      const story = JSON.parse(jsonString)[0]['generated_text']
+      return { ...event, story }
     }
+
     ```
-    This code will request the API for the external LLM to Secrets Manager. It will then make a request to the external LLM to generate a 80-120 words long children story by including the input context and will add the story and return it along with the input event.
+    This code will call our endpoint LLM deployed on Sagemaker requesting to generate a 80-120 words long children story by including the input context. It will then retrieve the story and return it along with the input event.
 6. Create a `src/handlers/translator.mjs` file and type in the following code
     ```js
     import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate"
