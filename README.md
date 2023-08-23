@@ -327,7 +327,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
     import { Upload } from "@aws-sdk/lib-storage"
     import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-    import { v4 as uuidv4 } from 'uuid'
+    import { randomUUID } from 'crypto'
 
     export const handler = async (event) => {   
       const pollyInput = {
@@ -340,7 +340,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
       const pollyCommand = new SynthesizeSpeechCommand(pollyInput)
       const pollyResponse = await pollyClient.send(pollyCommand)
       
-      const mp3FileName = `${uuidv4()}.mp3`
+      const mp3FileName = `${randomUUID()}.mp3`
       const signedUrlExpiresIn = 60 * 5
 
       const s3UploadInput = {
