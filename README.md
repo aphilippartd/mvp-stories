@@ -299,7 +299,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     export const handler = async (event) => {
       const body = JSON.parse(event.body)
       const sfnInput = {
-        stateMachineArn: process.env.MVPSTORIESWORKFLOW_STATE_MACHINE_NAME,
+        stateMachineArn: process.env.MVPSTORIESWORKFLOW_STATE_MACHINE_ARN,
         input: JSON.stringify({ context: body.context, locale: body.locale || 'en' })
       }
       const sfnClient = new SFNClient()
