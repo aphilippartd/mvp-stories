@@ -212,22 +212,22 @@ There are a few things that we need to modify in our `template.yaml` file to mak
 
 4. Change the **Type** key of **MvpStoriesWorkflow** from `STANDARD` to `EXPRESS`. This will allow us to invoke our Step Function workflow synchronously.
 5. Head to the **MvpStoriesWorkflowTrigger** and change the **Policies** key from 
-  ```yaml
-  Policies:
-    - StepFunctionsExecutionPolicy:
-        StateMachineName: !GetAtt MvpStoriesWorkflow.Name
-  ```
-  to
-  ```yaml
-  Policies:
-    - Statement:
-        - Effect: Allow
-          Action: states:StartSyncExecution
-          Resource: !GetAtt MvpStoriesWorkflow.Arn
-  ```
-  This will give the permission to the **MvpStoriesWorkflowTrigger** Lambda function to invoke the **MvpStoriesWorkflow** resource synchrounously.
+      ```yaml
+      Policies:
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt MvpStoriesWorkflow.Name
+      ```
+      to
+      ```yaml
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: states:StartSyncExecution
+              Resource: !GetAtt MvpStoriesWorkflow.Arn
+      ```
+      This will give the permission to the **MvpStoriesWorkflowTrigger** Lambda function to invoke the **MvpStoriesWorkflow** resource synchrounously.
 
-6. Finally to the end of the `template.yml` document and paste the following code:
+6. Finally, go to the end of the `template.yml` document and paste the following code:
     ```yaml
     Outputs:
       MvpStoriesApi:
@@ -240,11 +240,11 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
 
 1. create a the `src/handlers` in your `backend` directory.
 2. In the `src/handlers` folder run the following commands:
-  ```bash
-  npm init
-  npm install @aws-sdk/client-bedrock-runtime
-  ```
-  This will allow you to import and use the Bedrock runtime client from within your Lambda functions
+      ```bash
+      npm init
+      npm install @aws-sdk/client-bedrock-runtime
+      ```
+      This will allow you to import and use the Bedrock runtime client from within your Lambda functions
 3. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
     ```js
     import { SFNClient, StartSyncExecutionCommand } from "@aws-sdk/client-sfn"
@@ -404,5 +404,4 @@ A few ideas on how to improve on the current solution:
   - Amplify hosting can be directly connected to your git provider, meaning that on every push, it would re-build your frontend and deploy it for you.
 - Have different deployments for different environments
 - Let your application work `async` by submitting the request, integrating API Gateway with Step Functions directly (without the need to go through a Lambda invocation) and working with websockets to notify the user when the story has been generated.
-- Directly call AWS services like Amazon Polly and Amazon Translate from your Step Function workflow (this requires more knowledge on how the Step Function service works)
 - ...
