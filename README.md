@@ -7,6 +7,7 @@ In order to proceed with the demo, you should have the following:
 - [AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) installed
 - [Configure your AWS credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
 - Download the contents of this directory to use it when going over the demo.
+- Make sure to enable the Anthropic Claude Instant V1 model from the [Bedrock console](https://console.aws.amazon.com/bedrock/home#/modelaccess)
 
 ## What we are building
 
@@ -21,7 +22,7 @@ This is the architecture of the solution we are going to build:
 2. Call **Amazon API Gateway** backend
 3. Trigger an **AWS Lambda function** from API Gateway
 4. Trigger a syncronous execution of **AWS Step Functions workflow** from the Lambda function
-5. Call **Falcon TII’s LLM** through **Amazon Sagemaker endpoint** to generate a unique story
+5. Call **Anthropic Claude Instant V1 model** through **Amazon Bedrock** to generate a unique story
 6. Translate story if needed with **Amazon Translate**
 7. Convert story to speech with **Amazon Polly**
 8. Store generated story in an **Amazon S3** bucket
@@ -33,7 +34,7 @@ This is the architecture of the solution we are going to build:
 
 Now we will start building the backend of our solution. In order to do so, we will be leveraging [AWS Application Composer](https://aws.amazon.com/application-composer/).
 
-1. Let's start by downloading the contents of this directory on your local computer. Alternatively, start by creating a directory on your local computer called `mvp-stories`. This directory should contain two subdirectories, one for our frontend, one for our backend. Create the two directories:
+1. Let's start by downloading the contents of this directory on your local computer. You should have two directories:
    - `mvp-stories/backend`
    - `mvp-stories/frontend`
 2. Head to the [Application Composer console](https://console.aws.amazon.com/composer/home)
@@ -86,7 +87,7 @@ Now we will start building the backend of our solution. In order to do so, we wi
 14. Drag and drop an S3 Bucket resource. Change the logical ID to **MvpStoriesBucket**
 15. Link the **MvpStoriesTextToSpeech** resource with tge **MvpStoriesBucket** resource
   ![plot](./images/backend-part-1/11.png)
-16. Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
+16.  Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
     - Logical ID to **MvpStoriesBedrock**
     - Source path to `src/handlers`
     - Handler to `bedrock.handler`
@@ -99,8 +100,8 @@ Now we will start building the backend of our solution. In order to do so, we wi
       ```
       This will give the permission to your Lambda function to invoke your LLM through Amazon Bedrock.
     ![plot](./images/backend-part-1/12.png)
-
-A `template.yaml` file will have been created by Application Composer. This IaC (Infrastructure as Code) template describes your serverless architecture using [AWS SAM (Serverless Application Model)](https://aws.amazon.com/serverless/sam/).
+17. Click on the **template** tab and copy the contents. This IaC (Infrastructure as Code) template describes your serverless architecture using [AWS SAM (Serverless Application Model)](https://aws.amazon.com/serverless/sam/). Paste the copied code to a `template.yaml` in your backend folder `mvp-stories/backend`.
+  ![plot](./images/backend-part-1/13.png)
 
 ### Build the Step Function workflow logic
 
@@ -132,53 +133,47 @@ Currently the Step Function workflow resource in your Application Composer canva
     - **en**
 15. Click **Save conditions**
     ![plot](./images/step-function/6.png)
-16. Let's start with the case where the story does not need translation. Let's drag and drop a **Pass** state to transform the current state of the state machine to be passed to the next step.
-17. Change the state name to **Prepare input for textToSpeech**
+16. Let's start with the case where the story does not need translation. Drag and drop an AWS Lamba Invoke step.
+17. Change the state name to **Convert Story to Speech**
+18. Under API parameters, choose the function name to be **Enter function name** and `${MvpStoriesTextToSpeechArn}` as shown on the image below. This value will be dynamically filled in with the actual ARN of our Lambda function when our backend is deployed:
   ![plot](./images/step-function/7.png)
-18.  Click on Input
-19.  Select **Transform input with Parameters**
-20.  Fill in the following json:
-  ```json
-  {
-    "story.$": "$",
-    "locale.$": "$$.Execution.Input.locale"
-  }
-  ```
-  ![plot](./images/step-function/8.png)
-    With this, we are creating a json to be passed to the next state with the generated story and the requested language of the story.
-
-21.  Drag and drop an AWS Lamba Invoke step after the **Prepare input for textToSpeech** state.
-22.  Change the state name to **Convert Story to Speech**
-23.  Under API parameters, choose the function name to be **Enter function name** and `${MvpStoriesTextToSpeechArn}` as shown on the image below. This value will be dynamically filled in with the actual ARN of our Lambda function when our backend is deployed:
+19. Under **Payload** select **Enter Payload** and fill in the following payload:
+      ```json
+      {
+        "story.$": "$",
+        "locale.$": "$$.Execution.Input.locale"
+      }
+      ```
+      ![plot](./images/step-function/8.png)
+        With this, we are creating a json to be passed to the **MvpStoriesTextToSpeech** Lambda function execution.
+        
+20. Now lets handle the case were we actually need to translate our story. Drag and drop a Translate TranslateText step for the **Needs Translation** branch
+21. Change the state name to **Translate story**
+22. Change the API parameters for the Amazon Translate call to the following json:
+    ```json
+    {
+      "SourceLanguageCode": "en",
+      "TargetLanguageCode.$": "$$.Execution.Input.locale",
+      "Text.$": "$"
+    }
+    ```
     ![plot](./images/step-function/9.png)
-24.  Now lets handle the case were we actually need to translate our story. Drag and drop a Translate TranslateText step for the **Needs Translation** branch
-25.  Change the state name to **Translate story**
-26.  Change the API parameters for the Amazon Translate call to the following json:
-  ```json
-  {
-    "SourceLanguageCode": "en",
-    "TargetLanguageCode.$": "$$.Execution.Input.locale",
-    "Text.$": "$"
-  }
-  ```
-![plot](./images/step-function/10.png)
-1.   Similarly to the **Generate Story** step, we want to pass the translated story as input to the next state. Let's filter out the story from the result of the TranslateText call
+23.    Similarly to the **Generate Story** step, we want to pass the translated story as input to the next state. Let's filter out the story from the result of the TranslateText call
     1.  Click on Output
     2.  Select the **Filter output with OutputPath** option and type:
-        ```
-        $.TranslatedText
-        ```
-    
-  ![plot](./images/step-function/11.png)
+          ```
+          $.TranslatedText
+          ```
+        ![plot](./images/step-function/10.png)
 
-28. After our **Translate story** step, we want to perform the same steps as the **Default** branch of our Choice state.
+24. After our **Translate story** step, we want to perform the same steps as the **Default** branch of our Choice state.
     1.  Click on Configuration
     2.  Select **Next state** to be the **Prepare input for textToSpeech** state
-  ![plot](./images/step-function/12.png)
-29. Now that our workflow is setup, we can export it by clicking on **Import/Export**
-30. Click on **Export JSON definition**
-    ![plot](./images/step-function/13.png)
-31. Copy the downloaded file to your backend folder and name the file `statemachine.asl.json`
+  ![plot](./images/step-function/11.png)
+25. Now that our workflow is setup, we can export it by clicking on **Import/Export**
+26. Click on **Export JSON definition**
+    ![plot](./images/step-function/12.png)
+27. Copy the downloaded file to your backend folder and name the file `statemachine.asl.json`
 
 ### Finalize the backend locally
 
@@ -244,7 +239,13 @@ There are a few things that we need to modify in our `template.yaml` file to mak
 Now that we have our IaC settled, there is a last thing we need to take care of before being able to deploy. In Application Composer, we have defined 2 Lambda resources. We have defined their configuration but we did not define the actual code contained in those Lambda functions. Let's do this now.
 
 1. create a the `src/handlers` in your `backend` directory.
-2. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
+2. In the `src/handlers` folder run the following commands:
+  ```bash
+  npm init
+  npm install @aws-sdk/client-bedrock-runtime
+  ```
+  This will allow you to import and use the Bedrock runtime client from within your Lambda functions
+3. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
     ```js
     import { SFNClient, StartSyncExecutionCommand } from "@aws-sdk/client-sfn"
 
@@ -269,7 +270,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     }
     ```
     This code will handle the request incoming from API Gateway, call the Step Function workflow syncronously and return the formatted results.
-3. Create a `src/handlers/bedrock.mjs` file and type in the following code
+4. Create a `src/handlers/bedrock.mjs` file and type in the following code
     ```js
     import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime"
     const client = new BedrockRuntimeClient()
@@ -296,7 +297,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     }
     ```
     This code will call the Anthropic Claude Instant V1 model from Amazon Bedrock with a given prompt. Feel free to test out any other text generation model from Bedrock. Make sure to enable the model from the [Bedrock console](https://console.aws.amazon.com/bedrock/home#/modelaccess) before trying to use it in this demo.
-4. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
+5. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
     ```js
     import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly"
     import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
