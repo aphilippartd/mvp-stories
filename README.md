@@ -29,34 +29,7 @@ This is the architecture of the solution we are going to build:
 
 ## Demo
 
-### Deploy your LLM
-
-During this demo, we will be performing API calls to a LLM. In order to deploy our LLM, we will be using [Sagemaker Jumpstart](https://docs.aws.amazon.com/sagemaker/latest/dg/studio-jumpstart.html). 
-
-1. Head to the [Amazon Sagemaker domains console](https://console.aws.amazon.com/sagemaker/home#/studio)
-2. Click on **Create Domain**
-  ![plot](./images/sagemaker/1.png)
-3. Choose the name of your domain and user profile.
-4. Click on **Submit**.
-  ![plot](./images/sagemaker/2.png)
-5. Click on the Sagemaker domain you just created
-   ![plot](./images/sagemaker/3.png)
-6. Launch Sagemaker Studio
-  ![plot](./images/sagemaker/4.png)
-7. Click on **Sagemaker Jumpstart -> Models, notebooks, solutions**
-  ![plot](./images/sagemaker/5.png)
-8. Look for **falcon**
-9. Select **Falcon 7B Instruct BF16** and click on **View model**
-  ![plot](./images/sagemaker/6.png)
-10. Click on **Deploy**
-  ![plot](./images/sagemaker/7.png)
-  > Note: You might receive an error informing you that you have available instance to deploy your endpoint to. You might need to request a quota increase for this type of instance [here](https://console.aws.amazon.com/servicequotas/home/services/sagemaker/quotas).
-11.  Take note of the endpoint ARN and name
-  ![plot](./images/sagemaker/8.png)
-
-The deployment of your Sagemaker endpoint should take about 5-10 minutes. We will continue with the rest of the app in the meantime. 
-
-### Build the backend with Application Composer - Part 1
+### Build the backend with Application Composer
 
 Now we will start building the backend of our solution. In order to do so, we will be leveraging [AWS Application Composer](https://aws.amazon.com/application-composer/).
 
@@ -113,7 +86,7 @@ Now we will start building the backend of our solution. In order to do so, we wi
 14. Drag and drop an S3 Bucket resource. Change the logical ID to **MvpStoriesBucket**
 15. Link the **MvpStoriesTextToSpeech** resource with tge **MvpStoriesBucket** resource
   ![plot](./images/backend-part-1/11.png)
-16.  Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
+16. Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
     - Logical ID to **MvpStoriesBedrock**
     - Source path to `src/handlers`
     - Handler to `bedrock.handler`
@@ -126,7 +99,6 @@ Now we will start building the backend of our solution. In order to do so, we wi
       ```
       This will give the permission to your Lambda function to invoke your LLM through Amazon Bedrock.
     ![plot](./images/backend-part-1/12.png)
-
 
 A `template.yaml` file will have been created by Application Composer. This IaC (Infrastructure as Code) template describes your serverless architecture using [AWS SAM (Serverless Application Model)](https://aws.amazon.com/serverless/sam/).
 
