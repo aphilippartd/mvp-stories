@@ -77,12 +77,12 @@ Now we will start building the backend of our solution. In order to do so, we wi
 3.   Repeat for **CORS allowed headers** and **CORS allowed methods**
 4.   Click save
 ![plot](./images/backend-part-1/3.png)
-1.   Add the lambda resource that will be triggered from API Gateway.
+1.   Add the Lambda resource that will be triggered from API Gateway.
     ![plot](./images/backend-part-1/4.png)
 2.   Click on **Details**
 3.   Enter the logical ID to be **MvpStoriesWorkflowTrigger**
-4.   Update **Source path** field to `src/handlers`. This is the location where your lambda code will be stored locally.
-5.   Update **Handler** field to `workflowTrigger.handler`. This is the name of the js file containing the lambda code and the relative handler method that is exposed
+4.   Update **Source path** field to `src/handlers`. This is the location where your Lambda code will be stored locally.
+5.   Update **Handler** field to `workflowTrigger.handler`. This is the name of the js file containing the Lambda code and the relative handler method that is exposed
 6.   Click save
     ![plot](./images/backend-part-1/5.png)
 7.   Connect the created **MvpStoriesApi** to the **MvpStoriesWorkflowTrigger**
@@ -95,14 +95,40 @@ Now we will start building the backend of our solution. In order to do so, we wi
     ![plot](./images/backend-part-1/8.png)
 12. Link the **MvpStoriesWorkflowTrigger** resource to **MvpStoriesWorkflow** resource
     ![plot](./images/backend-part-1/9.png)
-13. Drag an additional lambda function resource, similarly to the firstly created lambda function resource. Change the following details for your function:
+13. Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
     - Logical ID to **MvpStoriesTextToSpeech**
     - Source path to `src/handlers`
     - Handler to `textToSpeech.handler`
+    - Add the following IAM policy in the Permissions section:
+      ```yaml
+      - Statement:
+        - Effect: Allow
+          Action:
+            - polly:*
+          Resource:
+            - '*'
+      ```
+      This will give the permission to your Lambda function to call the Amazon Polly service which is needed for the Text to Speech conversion of our story.
     ![plot](./images/backend-part-1/10.png)
 14. Drag and drop an S3 Bucket resource. Change the logical ID to **MvpStoriesBucket**
 15. Link the **MvpStoriesTextToSpeech** resource with tge **MvpStoriesBucket** resource
   ![plot](./images/backend-part-1/11.png)
+16.  Drag an additional Lambda function resource, similarly to the firstly created Lambda function resource. Change the following details for your function:
+    - Logical ID to **MvpStoriesBedrock**
+    - Source path to `src/handlers`
+    - Handler to `bedrock.handler`
+    - Add the following IAM policy in the Permissions section:
+      ```yaml
+      - Statement:
+        - Effect: Allow
+          Action: bedrock:InvokeModel
+          Resource: '*'
+      ```
+      This will give the permission to your Lambda function to invoke your LLM through Amazon Bedrock.
+    ![plot](./images/backend-part-1/12.png)
+
+
+A `template.yaml` file will have been created by Application Composer. This IaC (Infrastructure as Code) template describes your serverless architecture using [AWS SAM (Serverless Application Model)](https://aws.amazon.com/serverless/sam/).
 
 ### Build the Step Function workflow logic
 
@@ -115,172 +141,126 @@ Currently the Step Function workflow resource in your Application Composer canva
 4. Choose **Express** type of workflow (as for the sake of this demo, we will be running everything syncronously)
 5. Click next
     ![plot](./images/step-function/2.png)
-6. Drag and drop a SageMaker Runtime InvokeEndpoint action in your workflow.
-7. Set the name of the state to **Generate Story**
-8. Under API parameters, paste the JSON below. Those parameters will be used for the SageMaker endpoint invocation. Note that we are building a prompt based on the provided context as well as passing the name of the SageMaker endpoint we have previously deployed.
-  ![plot](./images/step-function/3.png)
-    ```json
-    {
-      "ContentType": "application/json",
-      "Body": {
-        "inputs.$": "States.Format('Write a 80-120 words long children story about {}', $.context)",
-        "parameters": {
-          "max_new_tokens": 300
-        }
-      },
-      "EndpointName": "NAME_OF_YOUR_SAGEMAKER_ENDPOINT"
-    }
-    ```
-
-9. We will want to pass the generated story as input to the next state. Let's filter out the story from the result of the SageMaker endpoint invocation:
-   1. Select the **Output** tab
-   2. Select the **Transform result with ResultSelector** option and type
-        ```json
-        {
-          "body.$": "States.StringToJson($.Body)"
-        }
-        ```
-        This will allow us to transform the stringified json body in an actual json
-   3. Select the **Filter output with OutputPath** option and type
-        ```
-        $.body[0].generated_text
-        ```
-        This will allow us to extract the generated text/story and pass it to the next state
-  ![plot](./images/step-function/4.png)
-10.  Now that we need to know wether our story needs translation or not. In order to do so, we need to make a choice. Drag and drop a **Choice** state after the **Generate Story** state. 
-11.  Change the state name to **Needs translation ?**
-12.  Click on the edit icon of Rule 1
+6. Drag and drop an AWS Lamba Invoke state.
+7. Change the state name to **Generate Story**
+8. Under API parameters, choose the function name to be **Enter function name** and `${MvpStoriesBedrockArn}` as shown on the image below. This value will be dynamically filled in with the actual ARN of our Lambda function when our backend is deployed:
+    ![plot](./images/step-function/3.png)
+9.   Now we need to know whether our story needs translation or not. In order to do so, we need to make a choice. Drag and drop a **Choice** state after the **Generate Story** state. 
+10.  Change the state name to **Needs translation ?**
+11.  Click on the edit icon of Rule 1
+    ![plot](./images/step-function/4.png)
+12. Enter the **Needs translation** in the comment section
+13. Click on Add conditions
     ![plot](./images/step-function/5.png)
-13. Enter the **Needs translation** in the comment section
-14. Click on Add conditions
-    ![plot](./images/step-function/6.png)
-15. Set condition for rule one as follows:
+14. Set condition for rule one as follows:
     - Not: **NOT**
     - Variable: **$$.Execution.Input.locale** (value of **locale** provided as input to statemachine)
     - Operator: **is equal to**
     - Value: **String constant**
     - **en**
-16. Click **Save conditions**
-    ![plot](./images/step-function/7.png)
-17. Let's start with the case where the story does not need translation. Let's drag and drop a **Pass** state to transform the current state of the state machine to be passed to the next step.
-18. Change the state name to **Prepare input for textToSpeech**
+15. Click **Save conditions**
+    ![plot](./images/step-function/6.png)
+16. Let's start with the case where the story does not need translation. Let's drag and drop a **Pass** state to transform the current state of the state machine to be passed to the next step.
+17. Change the state name to **Prepare input for textToSpeech**
+  ![plot](./images/step-function/7.png)
+18.  Click on Input
+19.  Select **Transform input with Parameters**
+20.  Fill in the following json:
+  ```json
+  {
+    "story.$": "$",
+    "locale.$": "$$.Execution.Input.locale"
+  }
+  ```
   ![plot](./images/step-function/8.png)
-19. Click on Input
-20. Select **Transform input with Parameters**
-21. Fill in the following json
-    ```json
-    {
-      "story.$": "$",
-      "locale.$": "$$.Execution.Input.locale"
-    }
-    ```
-    ![plot](./images/step-function/9.png)
     With this, we are creating a json to be passed to the next state with the generated story and the requested language of the story.
 
-22. Drag and drop an AWS Lamba Invoke step after the **Prepare input for textToSpeech** state.
-23. Change the state name to **Convert Story to Speech**
-24. Under API parameters, choose the function name to be **Enter function name** and **TBD** as shown on the image below (this is a dummy value as the lambda function does not exist yet. It will be updated later on in Application Composer):
-    ![plot](./images/step-function/10.png)
-25. Now lets handle the case were we actually need to translate our story. Drag and drop a Translate TranslateText step for the **Needs Translation** branch
-26. Change the state name to **Translate story**
-27. Change the API parameters for the Amazon Translate call to the following json
-    ```json
-    {
-      "SourceLanguageCode": "en",
-      "TargetLanguageCode.$": "$$.Execution.Input.locale",
-      "Text.$": "$"
-    }
-    ```
-  ![plot](./images/step-function/11.png)
-
-28. Similarly to the **Generate Story** step, we want to pass the translated story as input to the next state. Let's filter out the story from the result of the TranslateText call
+21.  Drag and drop an AWS Lamba Invoke step after the **Prepare input for textToSpeech** state.
+22.  Change the state name to **Convert Story to Speech**
+23.  Under API parameters, choose the function name to be **Enter function name** and `${MvpStoriesTextToSpeechArn}` as shown on the image below. This value will be dynamically filled in with the actual ARN of our Lambda function when our backend is deployed:
+    ![plot](./images/step-function/9.png)
+24.  Now lets handle the case were we actually need to translate our story. Drag and drop a Translate TranslateText step for the **Needs Translation** branch
+25.  Change the state name to **Translate story**
+26.  Change the API parameters for the Amazon Translate call to the following json:
+  ```json
+  {
+    "SourceLanguageCode": "en",
+    "TargetLanguageCode.$": "$$.Execution.Input.locale",
+    "Text.$": "$"
+  }
+  ```
+![plot](./images/step-function/10.png)
+1.   Similarly to the **Generate Story** step, we want to pass the translated story as input to the next state. Let's filter out the story from the result of the TranslateText call
     1.  Click on Output
     2.  Select the **Filter output with OutputPath** option and type:
         ```
         $.TranslatedText
         ```
     
-  ![plot](./images/step-function/12.png)
+  ![plot](./images/step-function/11.png)
 
-29. After our **Translate story** step, we want to perform the same steps as the **Default** branch of our Choice state.
+28. After our **Translate story** step, we want to perform the same steps as the **Default** branch of our Choice state.
     1.  Click on Configuration
     2.  Select **Next state** to be the **Prepare input for textToSpeech** state
-  ![plot](./images/step-function/13.png)
-30. Now that our workflow is setup, we can export it by clicking on **Import/Export**
-31. Click on **Export YAML definition**
-    ![plot](./images/step-function/14.png)
-32. Copy the contents of the downloaded file
+  ![plot](./images/step-function/12.png)
+29. Now that our workflow is setup, we can export it by clicking on **Import/Export**
+30. Click on **Export JSON definition**
+    ![plot](./images/step-function/13.png)
+31. Copy the downloaded file to your backend folder and name the file `statemachine.asl.json`
 
-### Build the backend with Application Composer - Part 2
-
-1. Go back to your Application Composer project.
-2. Click on your **MvpStoriesWorkflow** resource
-3. Paste the content of the downloaded state machine definition into the input field of your resource
-4. Click on save
-    ![plot](./images/backend-part-2/1.png)
-5. Link the **Convert Story to Speech** state in **MvpStoriesWorkflow** with the corresponding **MvpStoriesTextToSpeech** lambda resource
-    ![plot](./images/backend-part-2/2.png)
-    > Note: This is where Application composer will update the dummy function name **TBD** we had set out when defining Lambda invoke states in our Step Function workflow and place a dynamic reference to the Lambda resources that will be created from the SAM template generated by Application Composer.
-6. In order for our **MvpStoriesTextToSpeech** lambda function to be allowed to call the Amazon Polly service, we will want to add some permissions to our function.
-   1. Click on the resource
-   2. Scroll down to the permissions section. (note that some permissions to access the S3 bucket have already been automatically created by Application Composer 🦄)
-   3. Add the following permissions in the permissions tab
-      ```yaml
-      - Statement:
-        - Effect: Allow
-          Action:
-            - polly:*
-          Resource: 
-            - "*"
-      ```
-   4. Click Save
-  ![plot](./images/backend-part-2/3.png)
-
-7. We are now done with Application Composer
-   1. Click the Template tab
-   2. You will see a **yaml** template that we will use to deploy our backend with AWS SAM. Copy the contents of this template, we will use it in the next section.
-  ![plot](./images/backend-part-2/4.png)
 ### Finalize the backend locally
 
-The template file created by Application Composer is IaC (Infrastructure as Code) describing your serverless architecture using [AWS SAM (Serverless Application Model)](https://aws.amazon.com/serverless/sam/).
+There are a few things that we need to modify in our `template.yaml` file to make our application behave as we want to (and that we unfortunately cannot do directly in Application Composer at the time of writing this document).
 
-There are a few things that we need to modify in this template to make our application behave as we want to (and that we unfortunately cannot do directly in Application Composer at the time of writing this document).
-
-1. Paste the contents of the template in a file called `template.yaml` in your backend folder.
-2. Search for the key `Resources.MvpStoriesWorkflow.Properties.Type` and change it from **STANDARD** to **EXPRESS**.
-    > Note: For the sake of this demo, we are running our application syncronously. In order to be able to call our Step Function workflow syncronously, we need it to be of Type EXPRESS.
-3. Search for the key `Resources.MvpStoriesWorkflowTrigger.Properties.Policies` and change the content of this key from
+1. Head to the resource called **MvpStoriesWorkflow**. Remove the **Defininition** key from that resource and replace it with:
     ```yaml
-    Policies:
-      - StepFunctionsExecutionPolicy:
-          StateMachineName: !GetAtt MvpStoriesWorkflow.Name
+    DefinitionUri: ./statemachine.asl.json
     ```
-    to
-    ```yaml
+    Here, we are informing SAM where to find our workflow definition that we created from the Step Function console.
+
+2. Add another key to **MvpStoriesWorkflow**:
+   ```yaml
+   DefinitionSubstitutions:
+      MvpStoriesTextToSpeechArn: !GetAtt MvpStoriesTextToSpeech.Arn
+      MvpStoriesBedrockArn: !GetAtt MvpStoriesBedrock.Arn
+   ```
+   This addition allows us to dynamically pass the name of the 2 Lambda functions we will be using in our state machine (MvpStoriesTextToSpeech and MvpStoriesBedrock)
+
+3. We need to add a few permissions to **MvpStoriesWorkflow**, add the following permissions under the **Policies** key:
+   ```yaml
     Policies:
+      ...EXISTING_POLICIES...
       - Statement:
           - Effect: Allow
-            Action: states:StartSyncExecution
-            Resource: !GetAtt MvpStoriesWorkflow.Arn
-    ```
-    With this change we are allowing the lambda function to call our step function workflow in a syncronous way.
-4. Search for the key `Resources.MvpStoriesWorkflow.Properties.Policies` and add the following policies:
-    ```yaml
+            Action:
+              - translate:*
+            Resource:
+              - '*'
+      - LambdaInvokePolicy:
+          FunctionName: !Ref MvpStoriesTextToSpeech
+      - LambdaInvokePolicy:
+          FunctionName: !Ref MvpStoriesBedrock
+   ```
+   This gives the permission to **MvpStoriesWorkflow** to call the Amazon Translate service and invoke the two lambda functions used in our workflow.
+
+4. Change the **Type** key of **MvpStoriesWorkflow** from `STANDARD` to `EXPRESS`. This will allow us to invoke our Step Function workflow synchronously.
+5. Head to the **MvpStoriesWorkflowTrigger** and change the **Policies** key from 
+  ```yaml
+  Policies:
+    - StepFunctionsExecutionPolicy:
+        StateMachineName: !GetAtt MvpStoriesWorkflow.Name
+  ```
+  to
+  ```yaml
+  Policies:
     - Statement:
-      - Effect: Allow
-        Action:
-          - sagemaker:InvokeEndpoint
-        Resource:
-          - !Sub arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/NAME_OF_YOUR_SAGEMAKER_ENDPOINT
-    - Statement:
-      - Effect: Allow
-        Action:
-          - translate:*
-        Resource:
-          - '*'
-    ```
-    Those policies allow your Step Function workflow to invoke the SageMaker endpoint you deployed and to run the translation job with Amazon Translate.
-5. Head to the end of the `template.yml` document and paste the following code:
+        - Effect: Allow
+          Action: states:StartSyncExecution
+          Resource: !GetAtt MvpStoriesWorkflow.Arn
+  ```
+  This will give the permission to the **MvpStoriesWorkflowTrigger** Lambda function to invoke the **MvpStoriesWorkflow** resource synchrounously.
+
+6. Finally to the end of the `template.yml` document and paste the following code:
     ```yaml
     Outputs:
       MvpStoriesApi:
@@ -289,7 +269,7 @@ There are a few things that we need to modify in this template to make our appli
     ```
     This change will make sure that everytime you deploy your application with SAM, the API Gateway endpoint will be printed as output.
 
-Now that we have our IaC settled, there is a last thing we need to take care of before being able to deploy. In application composer, we have defined 2 lambda resources. We have defined their configuration but we did not define the actual code contained in those lambda functions. Let's do this now.
+Now that we have our IaC settled, there is a last thing we need to take care of before being able to deploy. In Application Composer, we have defined 2 Lambda resources. We have defined their configuration but we did not define the actual code contained in those Lambda functions. Let's do this now.
 
 1. create a the `src/handlers` in your `backend` directory.
 2. Create a `src/handlers/workflowTrigger.mjs` file and type in the following code
@@ -317,7 +297,34 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
     }
     ```
     This code will handle the request incoming from API Gateway, call the Step Function workflow syncronously and return the formatted results.
-3. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
+3. Create a `src/handlers/bedrock.mjs` file and type in the following code
+    ```js
+    import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime"
+    const client = new BedrockRuntimeClient()
+
+    export const handler = async (event) => {
+      const command = new InvokeModelCommand({
+        "modelId": "anthropic.claude-instant-v1",
+        "contentType": "application/json",
+        "accept": "*/*",
+        "body": JSON.stringify({
+          "prompt": `\n\nHuman: Write an approx 100 words long children story about ${event.context}. Only provide the generated story as response, no leading text. \n\nAssistant:`,
+          "max_tokens_to_sample": 300,
+          "temperature": 1,
+          "top_k": 250,
+          "top_p": 0.999,
+          "stop_sequences": [
+              "\n\nHuman:"
+          ],
+          "anthropic_version": "bedrock-2023-05-31"
+        })
+      })
+      const response = await client.send(command)
+      return Buffer.from(response.body).toString('utf8')
+    }
+    ```
+    This code will call the Anthropic Claude Instant V1 model from Amazon Bedrock with a given prompt. Feel free to test out any other text generation model from Bedrock. Make sure to enable the model from the [Bedrock console](https://console.aws.amazon.com/bedrock/home#/modelaccess) before trying to use it in this demo.
+4. Create a `src/handlers/textToSpeech.mjs` file and type in the following code
     ```js
     import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly"
     import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3"
@@ -423,6 +430,6 @@ A few ideas on how to improve on the current solution:
   - The `sam pipeline` command can help you setup a deployment pipeline. More information about this [here](https://aws.amazon.com/blogs/compute/introducing-aws-sam-pipelines-automatically-generate-deployment-pipelines-for-serverless-applications/)
   - Amplify hosting can be directly connected to your git provider, meaning that on every push, it would re-build your frontend and deploy it for you.
 - Have different deployments for different environments
-- Let your application work `async` by submitting the request, integrating API Gateway with Step Functions directly (without the need to go through a lambda invocation) and working with websockets to notify the user when the story has been generated.
+- Let your application work `async` by submitting the request, integrating API Gateway with Step Functions directly (without the need to go through a Lambda invocation) and working with websockets to notify the user when the story has been generated.
 - Directly call AWS services like Amazon Polly and Amazon Translate from your Step Function workflow (this requires more knowledge on how the Step Function service works)
 - ...
