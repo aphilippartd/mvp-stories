@@ -293,7 +293,7 @@ Now that we have our IaC settled, there is a last thing we need to take care of 
         })
       })
       const response = await client.send(command)
-      return Buffer.from(response.body).toString('utf8')
+      return JSON.parse(Buffer.from(response.body).toString('utf8')).completion
     }
     ```
     This code will call the Anthropic Claude Instant V1 model from Amazon Bedrock with a given prompt. Feel free to test out any other text generation model from Bedrock. Make sure to enable the model from the [Bedrock console](https://console.aws.amazon.com/bedrock/home#/modelaccess) before trying to use it in this demo.
